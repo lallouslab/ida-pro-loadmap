@@ -37,7 +37,7 @@
 #include <shlwapi.h>
 #pragma comment(lib, "shlwapi.lib")
 
-#define strncasecmp strnicmp
+#define strncasecmp _strnicmp
 
 void pathExtensionSwitch(char * fname, const char * newext, size_t fnbuf_len);
 

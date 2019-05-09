@@ -44,23 +44,23 @@
 #include <fpro.h>
 #include <prodir.h> // just for MAXPATH
 
-
-typedef struct _tagPLUGIN_OPTIONS {
-    int bNameApply;    //< true - apply to name, false - apply to comment
-    int bReplace;      //< replace the existing name or comment
-    int bVerbose;      //< show detail messages
-} PLUGIN_OPTIONS;
+struct PLUGIN_OPTIONS
+{
+    int bNameApply = true;    //< true - apply to name, false - apply to comment
+    int bReplace = true;      //< replace the existing name or comment
+    int bVerbose = false;      //< show detail messages
+};
 
 const size_t g_minLineLen = 14; // For a "xxxx:xxxxxxxx " line
 
 static char g_szIniPath[MAXPATH] = { 0 };
 
 /// @brief Global variable for options of plugin
-static PLUGIN_OPTIONS g_options = { 0 };
+static PLUGIN_OPTIONS g_options;
 
 static const cfgopt_t g_optsinfo[] =
 {
-	cfgopt_t("NAME_APPLY", &g_options.bNameApply, 0, 1),
+	cfgopt_t("NAME_APPLY",       &g_options.bNameApply, 0, 1),
     cfgopt_t("REPLACE_EXISTING", &g_options.bReplace, 0, 1),
 	cfgopt_t("VERBOSE_MESSAGES", &g_options.bVerbose, 0, 1),
 };
@@ -93,13 +93,12 @@ void linearAddressToSymbolAddr(MapFile::MAPSymbol &sym, unsigned long linear_add
  ////////////////////////////////////////////////////////////////////////////////
 void showMsg(const char *format, ...)
 {
-    if (g_options.bVerbose)
-    {
-        va_list va;
-        va_start(va, format);
-        (void) vmsg(format, va);
-        va_end(va);
-    }
+    if (!g_options.bVerbose)
+        return;
+    va_list va;
+    va_start(va, format);
+    (void) vmsg(format, va);
+    va_end(va);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -256,9 +255,8 @@ bool idaapi run(size_t)
 
             size_t lineLen = (size_t) (pEOL - pLine);
             if (lineLen < g_minLineLen)
-            {
                 continue;
-            }
+
             char fmt[80];
             fmt[0] = '\0';
 
@@ -273,7 +271,8 @@ bool idaapi run(size_t)
                     showMsg(fmt, pLine);
                     continue;
                 }
-            } else
+            }
+            else
             {
                 sectnHdr = MapFile::recognizeSectionEnd(sectnHdr, pLine, lineLen);
                 if (sectnHdr == MapFile::NO_SECTION)
@@ -283,6 +282,7 @@ bool idaapi run(size_t)
                     continue;
                 }
             }
+
             MapFile::ParseResult parsed;
             prvsym.seg = sym.seg;
             prvsym.addr = sym.addr;
@@ -294,20 +294,20 @@ bool idaapi run(size_t)
 
             switch (sectnHdr)
             {
-            case MapFile::NO_SECTION:
-                parsed = MapFile::SKIP_LINE;
-                break;
-            case MapFile::MSVC_MAP:
-            case MapFile::BCCL_NAM_MAP:
-            case MapFile::BCCL_VAL_MAP:
-                parsed = parseMsSymbolLine(sym,pLine,lineLen,g_minLineLen,numOfSegs);
-                break;
-            case MapFile::WATCOM_MAP:
-                parsed = parseWatcomSymbolLine(sym,pLine,lineLen,g_minLineLen,numOfSegs);
-                break;
-            case MapFile::GCC_MAP:
-                parsed = parseGccSymbolLine(sym,pLine,lineLen,g_minLineLen,numOfSegs);
-                break;
+                case MapFile::NO_SECTION:
+                    parsed = MapFile::SKIP_LINE;
+                    break;
+                case MapFile::MSVC_MAP:
+                case MapFile::BCCL_NAM_MAP:
+                case MapFile::BCCL_VAL_MAP:
+                    parsed = parseMsSymbolLine(sym,pLine,lineLen, g_minLineLen, numOfSegs);
+                    break;
+                case MapFile::WATCOM_MAP:
+                    parsed = parseWatcomSymbolLine(sym,pLine,lineLen,g_minLineLen,numOfSegs);
+                    break;
+                case MapFile::GCC_MAP:
+                    parsed = parseGccSymbolLine(sym,pLine,lineLen,g_minLineLen,numOfSegs);
+                    break;
             }
 
             if (parsed == MapFile::SKIP_LINE)
@@ -316,6 +316,7 @@ bool idaapi run(size_t)
                 showMsg(fmt, pLine);
                 continue;
             }
+
             if (parsed == MapFile::FINISHING_LINE)
             {
                 sectnHdr = MapFile::NO_SECTION;
@@ -324,6 +325,7 @@ bool idaapi run(size_t)
                 showMsg(fmt, pLine);
                 continue;
             }
+
             if (parsed == MapFile::INVALID_LINE)
             {
                 invalidSyms++;
@@ -331,6 +333,7 @@ bool idaapi run(size_t)
                 showMsg(fmt, pLine);
                 continue;
             }
+
             // If shouldn't apply names
             bool bNameApply = g_options.bNameApply;
             if (parsed == MapFile::COMMENT_LINE)
@@ -340,6 +343,7 @@ bool idaapi run(size_t)
                 if (BADADDR == sym.addr)
                     continue;
             }
+            
             // Determine the DeDe map file
             char *pname = sym.name;
             if (('<' == pname[0]) && ('-' == pname[1]))
@@ -389,19 +393,16 @@ bool idaapi run(size_t)
                 // Apply symbols for comment
                 if (set_cmt(la, pname, false))
                 {
-                    showMsg("%04X:%08X - Change comment to '%s' succeeded\n",
-                        sym.seg, la, pname);
+                    showMsg("%04X:%08X - Change comment to '%s' succeeded\n", sym.seg, la, pname);
                     validSyms++;
                 }
                 else
                 {
-                    showMsg("%04X:%08X - Change comment to '%s' failed\n",
-                        sym.seg, la, pname);
+                    showMsg("%04X:%08X - Change comment to '%s' failed\n", sym.seg, la, pname);
                     invalidSyms++;
                 }
             }
         }
-
     }
     catch (...)
     {
@@ -453,9 +454,9 @@ void idaapi term(void)
 char wanted_name[]   = "Load Symbols From MAP File";
 char wanted_hotkey[] = "Ctrl-M";
 char comment[]       = "LoadMap loads symbols from a VC/BC/Watcom/Dede map file.";
-char help[]          = "LoadMap "PLUG_VERSION", Visual C/Borland C/Watcom C/Dede map file import plugin."
-                              "This module reads selected map file, and loads symbols\n"
-                              "into IDA database. Click it while holding Shift to see options.";
+char help[]          = "LoadMap " PLUG_VERSION ", Visual C/Borland C/Watcom C/Dede map file import plugin."
+                       "This module reads selected map file, and loads symbols\n"
+                       "into IDA database. Click it while holding Shift to see options.";
 /// @}
 
 ////////////////////////////////////////////////////////////////////////////////
